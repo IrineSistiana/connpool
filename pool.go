@@ -134,12 +134,14 @@ func (p *Pool) Status() PoolStatus {
 func (p *Pool) Get(ctx context.Context) (_ Conn, newConn bool, err error) {
 	waitDialCall := func(dc *dialingCall, ctx context.Context) (conn Conn, newConn bool, err error) {
 		conn, err = dc.waitConn(ctx)
-		cs := conn.Status()
-		if !cs.Available {
+		if err != nil {
+			return nil, false, err
+		}
+		if !conn.Status().Available {
 			p.Release(conn)
 			return nil, false, ErrConnNotAvailable
 		}
-		return conn, true, err
+		return conn, true, nil
 	}
 
 	p.m.Lock()
