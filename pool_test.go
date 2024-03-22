@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -33,24 +34,46 @@ func (c *dummyConn) Close() error {
 func Test_Pool(t *testing.T) {
 	r := require.New(t)
 	p := NewPool(Opts{
-		Dial:             func(ctx context.Context) (Conn, error) { return &dummyConn{available: true}, nil },
-		MaxStream:        1,
+		Dial: func(ctx context.Context) (Conn, error) {
+			time.Sleep(time.Millisecond * time.Duration(rand.IntN(20)))
+			return &dummyConn{available: true}, nil
+		},
+		MaxStream:        10,
 		MaxIdleBusyRatio: 1,
 	})
 
+	var cm sync.Mutex
 	conns := make([]Conn, 0)
-	for i := 0; i < 100; i++ {
-		conn, _, err := p.Get(context.Background())
-		r.NoError(err)
-		conns = append(conns, conn)
+	var wg sync.WaitGroup
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, _, err := p.Get(context.Background())
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			cm.Lock()
+			conns = append(conns, conn)
+			cm.Unlock()
+		}()
 	}
-	r.Equal(100, p.Status().Busy)
+	wg.Wait()
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	r.True(p.Status().Busy >= 100)
+	r.True(p.Status().Idle == 0)
+	r.True(p.Status().Dialing == 0)
 
 	for _, conn := range conns {
 		p.Release(conn)
 	}
 	r.Equal(0, p.Status().Busy)
 	r.Equal(1, p.Status().Idle)
+	r.Equal(0, p.Status().Dialing)
 }
 
 func Test_Pool_Reuse_Efficiency(t *testing.T) {

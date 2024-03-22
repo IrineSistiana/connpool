@@ -184,6 +184,7 @@ func (p *Pool) Get(ctx context.Context) (_ Conn, newConn bool, err error) {
 			p.m.Unlock()
 			return waitDialCall(dc, ctx)
 		}
+		dc.m.Unlock()
 	}
 
 	// Dial new connection.
