@@ -20,16 +20,22 @@ var (
 // Conn will be stored in Pool.
 type Conn interface {
 	io.Closer
+
 	// Report the current status of the connection.
 	// Should be fast and should not block. Otherwise, it slow down or block most of
 	// calls of the Pool.
 	Status() ConnStatus
+
+	// The connection is picked by the pool. Reserve one request.
+	Reserve()
 }
 
 type ConnStatus struct {
 	// Closed connections will not be picked up and will be removed from the pool.
 	// This status MUST NOT be changed once it was true.
 	Closed bool
+	// Indicate the connection can be picked up at least once (can take at least one
+	// more request).
 	// If unavailable, the connection won't be picked up.
 	// This status can be changed at any time.
 	Available bool
@@ -141,6 +147,7 @@ func (p *Pool) Get(ctx context.Context) (_ Conn, newConn bool, err error) {
 			p.Release(conn)
 			return nil, false, ErrConnNotAvailable
 		}
+		conn.Reserve()
 		return conn, true, nil
 	}
 
@@ -153,6 +160,7 @@ func (p *Pool) Get(ctx context.Context) (_ Conn, newConn bool, err error) {
 	// Try pick a busy conn from pool.
 	conn := p.pickBusyConnLocked()
 	if conn != nil {
+		conn.Reserve()
 		p.m.Unlock()
 		return conn, false, nil
 	}

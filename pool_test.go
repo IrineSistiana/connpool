@@ -30,6 +30,7 @@ func (c *dummyConn) Close() error {
 	c.m.Unlock()
 	return nil
 }
+func (c *dummyConn) Reserve() {}
 
 func Test_Pool(t *testing.T) {
 	r := require.New(t)
